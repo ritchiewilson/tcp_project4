@@ -19,6 +19,31 @@ typedef struct header_t {
   unsigned int sequence;
 } header;
 
+#define WINDOW_SIZE 20
+
+
+typedef struct window_frame_t {
+  header head;
+  char * data;
+  unsigned int is_free;
+} window_frame;
+
+
+typedef struct window_t {
+  int size;
+  window_frame frames[WINDOW_SIZE];
+  int last_used_frame;
+  int data_offset_at_start_of_window;
+} window;
+
+
+int initialize_window(window *w);
+int window_has_free_space(window w);
+int shift_window(window *w, int shift);
+int add_frame_at_index(window *w, header h, char * data, int index);
+int append_new_frame(window *w, header h, char * data);
+
+
 unsigned int MAGIC;
 
 void dump_packet(unsigned char *data, int size);

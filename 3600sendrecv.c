@@ -144,3 +144,63 @@ void dump_packet(unsigned char *data, int size) {
         printf("[%4.4s]   %-50.50s  %s\n", addrstr, hexstr, charstr);
     }
 }
+
+
+int initialize_window(window *w){
+  w->size = WINDOW_SIZE;
+  w->last_used_frame = -1;
+  w->data_offset_at_start_of_window = 0;
+  int i;
+  for (i = 0; i < w->size; i++)
+    w->frames[i].is_free = 1;
+  return 0;
+}
+
+
+/*
+ * Returns 1 if window has free space left. Returns 0 if it does not.
+ */
+int window_has_free_space(window w){
+  if (w.last_used_frame < w.size)
+    return 1;
+  return 0;
+}
+
+
+int shift_window(window *w, int shift){
+  int i;
+  for(i = 0; i < w->size; i++){
+    if (i < shift){
+      w->data_offset_at_start_of_window += w->frames[i].head.length;
+      free(w->frames[i].data);
+    }
+    else if ( i < w->size - shift){
+      w->frames[i - shift] = w->frames[i];
+    }
+  }
+  w->last_used_frame -= shift;
+  return 0;
+}
+
+int add_frame_at_index(window *w, header h, char * data, int index){
+  w->frames[index].head = h;
+  w->frames[index].data = data;
+  w->frames[index].is_free = 0;
+  return 0;
+}
+
+/*
+ * appends the header and data as a new frame in the window, and increments
+ * last used frame.
+ *
+ * Returns 0 on success
+ * Returns -1 if there is no free space
+ */
+int append_new_frame(window *w, header h, char * data){
+  if (! window_has_free_space(*w))
+    return -1;
+  add_frame_at_index(w, h, data, w->last_used_frame + 1);
+  w->last_used_frame++;
+  return 0;
+}
+

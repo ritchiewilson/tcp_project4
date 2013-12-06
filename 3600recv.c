@@ -23,9 +23,7 @@
 #include "3600sendrecv.h"
 
 unsigned int sequence = 0;
-#define WINDOW_SIZE 20
-header window_headers[WINDOW_SIZE];
-void *window[WINDOW_SIZE];
+window win;
 int data_byte_at_start_of_window = 0;
 
 int main() {
@@ -73,13 +71,11 @@ int main() {
 
   // construct the timeout
   struct timeval t;
-  t.tv_sec = 30;
+  t.tv_sec = 300;
   t.tv_usec = 0;
 
 
-  for(int i = 0; i < WINDOW_SIZE; i++){
-    window[i] = NULL;
-  }
+  initialize_window(&win);
 
   // wait to receive, or for a timeout
   while (1) {
@@ -97,27 +93,23 @@ int main() {
         exit(1);
       }
 
-//      dump_packet(buf, received);
-
       header *myheader = get_header(buf);
-      int window_pos = (myheader->sequence - data_byte_at_start_of_window) / 1460;
+      int window_pos = (myheader->sequence - win.data_offset_at_start_of_window) / 1460;
   
-      if (myheader->magic != MAGIC || window_pos > WINDOW_SIZE) {
+      if (myheader->magic != MAGIC || window_pos > win.size) {
         mylog("[recv corrupted packet]\n");
         continue;
       }
      
-      if (window[window_pos] == NULL){
-        window_headers[window_pos] = *myheader;
-        window[window_pos] = buf;
+      if (win.frames[window_pos].is_free){
+        add_frame_at_index(&win, *myheader, buf, window_pos);
       }
       
       int eof = 0;
       int i = 0;
-      while(i < WINDOW_SIZE && window[i] != NULL){
-        get_header(window[i]);
-        header *head = &window_headers[i];
-        char *data = get_data(window[i]);
+      while(i < win.size && !win.frames[i].is_free){
+        header *head = &(win.frames[i].head);
+        char *data = get_data(win.frames[i].data);
         write(1, data, head->length);
         mylog("[recv data] %d (%d) %s\n", head->sequence, head->length, "ACCEPTED (in-order)");
         if(head->eof)
@@ -126,7 +118,7 @@ int main() {
       }
       int frames_printed = i;
       if (frames_printed > 0){ // some frames at start of window were printed, so window can shift
-        header *last_header = &window_headers[frames_printed - 1];
+        header *last_header = &win.frames[frames_printed - 1].head;
         int ack_num = last_header->sequence + last_header->length;
         mylog("[send ack] %d\n", ack_num);
         header *responseheader = make_header(ack_num, 0, last_header->eof, 1);
@@ -134,19 +126,7 @@ int main() {
           perror("sendto");
           exit(1);
         }
-        for (int j = 0; j < WINDOW_SIZE; j++){
-          if (j < frames_printed){
-            header *h = &window_headers[j];
-            data_byte_at_start_of_window += h->length;
-            free(window[j]);
-          }
-          else if (j < WINDOW_SIZE - frames_printed){
-            window_headers[j - frames_printed] = window_headers[j];
-            window[j - frames_printed] = window[j];
-          }
-          else
-            window[j] = NULL;
-        }
+        shift_window(&win, frames_printed);
       }
       
       if (eof) {

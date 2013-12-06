@@ -25,11 +25,7 @@
 static int DATA_SIZE = 1460;
 
 unsigned int sequence = 0;
-#define WINDOW_SIZE 20
-header window_headers[WINDOW_SIZE];
-void *window[WINDOW_SIZE];
-unsigned int data_byte_at_start_of_window = 0;
-int last_used_window_frame = 0;
+window win;
 
 void usage() {
   printf("Usage: 3600send host:port\n");
@@ -62,12 +58,7 @@ void *get_next_packet(int *len) {
   memcpy(((char *) packet) +sizeof(header), data, data_len);
   sequence += data_len;
 
-  // save this data in case we need to retransmit
-  int i = 0;
-  while (window[i] == NULL && i < WINDOW_SIZE)
-    i++;
-  window_headers[i] = *myheader;
-  window[i] = data;
+  append_new_frame(&win, *myheader, data);
 
   *len = sizeof(header) + data_len;
 
@@ -77,6 +68,8 @@ void *get_next_packet(int *len) {
 int send_next_packet(int sock, struct sockaddr_in out) {
   int packet_len = 0;
   void *packet = get_next_packet(&packet_len);
+
+  dump_packet(packet, packet_len);
 
   if (packet == NULL) 
     return 0;
@@ -114,6 +107,8 @@ int main(int argc, char *argv[]) {
    * get you started.
    */
 
+  initialize_window(&win);
+
   // extract the host IP and port
   if ((argc != 2) || (strstr(argv[1], ":") == NULL)) {
     usage();
@@ -143,17 +138,14 @@ int main(int argc, char *argv[]) {
 
   // construct the timeout
   struct timeval t;
-  t.tv_sec = 30;
+  t.tv_sec = 300;
   t.tv_usec = 0;
 
 
   while (send_next_packet(sock, out)) {
     int done = 0;
 
-    while(last_used_window_frame < WINDOW_SIZE && 
-          send_next_packet(sock, out)){
-      last_used_window_frame++;
-    }
+    while(window_has_free_space(win) && send_next_packet(sock, out)){}
 
     while (! done) {
       FD_ZERO(&socks);
@@ -171,28 +163,18 @@ int main(int argc, char *argv[]) {
 
         header *myheader = get_header(buf);
 
-        if ((myheader->magic == MAGIC) && (myheader->sequence >= data_byte_at_start_of_window) 
-            && (myheader->ack == 1)) {
+        if ((myheader->magic == MAGIC) && 
+            (myheader->sequence >= win.data_offset_at_start_of_window) &&
+            (myheader->ack == 1)) {
           mylog("[recv ack] %d\n", myheader->sequence);
-          data_byte_at_start_of_window = myheader->sequence;
+          win.data_offset_at_start_of_window = myheader->sequence;
           // figure out how many saved packets have now been acked
           int acked = 0;
-          while (window_headers[acked].sequence < myheader->sequence && acked < WINDOW_SIZE)
+          while (win.frames[acked].head.sequence < myheader->sequence && 
+                 acked < win.last_used_frame)
             acked++;
-          // shift all the pointers round in the window
-          for(int i = 0; i < WINDOW_SIZE; i++){
-            if (i < acked){
-              data_byte_at_start_of_window += window_headers[i].length;
-              free(window[i]);
-            }
-            else if ( i < WINDOW_SIZE - acked){
-              window_headers[i - acked] = window_headers[i];
-              window[i - acked] = window[i];
-            }
-            else
-              window[i] = NULL;
-          }
-          last_used_window_frame -= acked;
+
+          shift_window(&win, acked);
           done = 1;
         } else {
           mylog("[recv corrupted ack] %x %d\n", MAGIC, sequence);

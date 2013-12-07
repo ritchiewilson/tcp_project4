@@ -71,7 +71,7 @@ int main() {
 
   // construct the timeout
   struct timeval t;
-  t.tv_sec = 300;
+  t.tv_sec = TIMEOUT;
   t.tv_usec = 0;
 
 

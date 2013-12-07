@@ -20,6 +20,7 @@ typedef struct header_t {
 } header;
 
 #define WINDOW_SIZE 20
+#define TIMEOUT 3
 
 
 typedef struct window_frame_t {
@@ -32,7 +33,7 @@ typedef struct window_frame_t {
 typedef struct window_t {
   int size;
   window_frame frames[WINDOW_SIZE];
-  int last_used_frame;
+  int next_available_frame;
   int data_offset_at_start_of_window;
 } window;
 

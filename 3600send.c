@@ -58,7 +58,10 @@ void *get_next_packet(int *len) {
   memcpy(((char *) packet) +sizeof(header), data, data_len);
   sequence += data_len;
 
-  append_new_frame(&win, *myheader, data);
+  header stored_header = *myheader;
+  get_header(&stored_header);
+  
+  append_new_frame(&win, stored_header, data);
 
   *len = sizeof(header) + data_len;
 
@@ -68,8 +71,6 @@ void *get_next_packet(int *len) {
 int send_next_packet(int sock, struct sockaddr_in out) {
   int packet_len = 0;
   void *packet = get_next_packet(&packet_len);
-
-  dump_packet(packet, packet_len);
 
   if (packet == NULL) 
     return 0;
@@ -138,7 +139,7 @@ int main(int argc, char *argv[]) {
 
   // construct the timeout
   struct timeval t;
-  t.tv_sec = 300;
+  t.tv_sec = TIMEOUT;
   t.tv_usec = 0;
 
 
@@ -167,11 +168,10 @@ int main(int argc, char *argv[]) {
             (myheader->sequence >= win.data_offset_at_start_of_window) &&
             (myheader->ack == 1)) {
           mylog("[recv ack] %d\n", myheader->sequence);
-          win.data_offset_at_start_of_window = myheader->sequence;
           // figure out how many saved packets have now been acked
           int acked = 0;
-          while (win.frames[acked].head.sequence < myheader->sequence && 
-                 acked < win.last_used_frame)
+          while (!win.frames[acked].is_free &&
+                 win.frames[acked].head.sequence < myheader->sequence)
             acked++;
 
           shift_window(&win, acked);

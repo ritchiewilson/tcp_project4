@@ -148,7 +148,7 @@ void dump_packet(unsigned char *data, int size) {
 
 int initialize_window(window *w){
   w->size = WINDOW_SIZE;
-  w->last_used_frame = -1;
+  w->next_available_frame = 0;
   w->data_offset_at_start_of_window = 0;
   int i;
   for (i = 0; i < w->size; i++)
@@ -161,7 +161,7 @@ int initialize_window(window *w){
  * Returns 1 if window has free space left. Returns 0 if it does not.
  */
 int window_has_free_space(window w){
-  if (w.last_used_frame < w.size)
+  if (w.next_available_frame < w.size)
     return 1;
   return 0;
 }
@@ -173,12 +173,17 @@ int shift_window(window *w, int shift){
     if (i < shift){
       w->data_offset_at_start_of_window += w->frames[i].head.length;
       free(w->frames[i].data);
+      w->frames[i].is_free = 1;
     }
     else if ( i < w->size - shift){
       w->frames[i - shift] = w->frames[i];
+      w->frames[i].is_free = 1;
+    }
+    else{
+      w->frames[i].is_free = 1;
     }
   }
-  w->last_used_frame -= shift;
+  w->next_available_frame -= shift;
   return 0;
 }
 
@@ -199,8 +204,8 @@ int add_frame_at_index(window *w, header h, char * data, int index){
 int append_new_frame(window *w, header h, char * data){
   if (! window_has_free_space(*w))
     return -1;
-  add_frame_at_index(w, h, data, w->last_used_frame + 1);
-  w->last_used_frame++;
+  add_frame_at_index(w, h, data, w->next_available_frame);
+  w->next_available_frame++;
   return 0;
 }
 

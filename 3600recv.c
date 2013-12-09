@@ -71,7 +71,7 @@ int main() {
 
   // construct the timeout
   struct timeval t;
-  t.tv_sec = TIMEOUT;
+  t.tv_sec = RECV_TIMEOUT;
   t.tv_usec = 0;
 
 
@@ -96,15 +96,26 @@ int main() {
       header *myheader = get_header(buf);
       int window_pos = (myheader->sequence - win.data_offset_at_start_of_window) / 1460;
   
-      if (myheader->magic != MAGIC || window_pos > win.size) {
+      if (myheader->magic != MAGIC){
         mylog("[recv corrupted packet]\n");
         continue;
       }
+      if ( window_pos > win.size) {
+        mylog("[recv error - packet beyond window size]\n");
+        continue;
+      }
+
+      if ( myheader->sequence < win.data_offset_at_start_of_window) {
+        mylog("[recv duplicate packet]\n");
+        continue;
+      }
      
+      // store the data in case there are gaps in transmission
       if (win.frames[window_pos].is_free){
         add_frame_at_index(&win, *myheader, buf, window_pos);
       }
-      
+
+      // print all completed stored data at the front of the window
       int eof = 0;
       int i = 0;
       while(i < win.size && !win.frames[i].is_free){
@@ -117,17 +128,28 @@ int main() {
         i++;
       }
       int frames_printed = i;
-      if (frames_printed > 0){ // some frames at start of window were printed, so window can shift
+
+      // Build ACK
+      header *responseheader;
+      int ack_num;
+      if (frames_printed > 0){
         header *last_header = &win.frames[frames_printed - 1].head;
-        int ack_num = last_header->sequence + last_header->length;
-        mylog("[send ack] %d\n", ack_num);
-        header *responseheader = make_header(ack_num, 0, last_header->eof, 1);
-        if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
-          perror("sendto");
-          exit(1);
-        }
-        shift_window(&win, frames_printed);
+        ack_num = last_header->sequence + last_header->length;
       }
+      else{
+        ack_num = win.data_offset_at_start_of_window;
+      }
+      mylog("[send ack] %d\n", ack_num);
+      responseheader = make_header(ack_num, 0, eof, 1);
+
+      // Send ACK
+      if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
+        perror("sendto");
+        exit(1);
+      }
+
+      // Shift the window the number of frames full received and printed
+      shift_window(&win, frames_printed);
       
       if (eof) {
         mylog("[recv eof]\n");

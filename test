@@ -66,7 +66,7 @@ sub runPerfTest {
   my ($problem, $netsim, $args) = @_;
 
   print pad("  $problem", 60);
-  `netsim $netsim`;
+  `/course/cs3600f13/bin/project4/netsim $netsim`;
   $output = `./run $args`;
 
   if ($output =~ m|Data match: Yes|) {

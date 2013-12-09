@@ -175,7 +175,7 @@ int shift_window(window *w, int shift){
       free(w->frames[i].data);
       w->frames[i].is_free = 1;
     }
-    else if ( i < w->size - shift){
+    else if ( i <= w->size - shift){
       w->frames[i - shift] = w->frames[i];
       w->frames[i].is_free = 1;
     }

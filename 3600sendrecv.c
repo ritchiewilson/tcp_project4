@@ -175,12 +175,10 @@ int shift_window(window *w, int shift){
     if (i < shift){
       w->data_offset_at_start_of_window += w->frames[i].head.length;
       free(w->frames[i].data);
-      w->frames[i].is_free = 1;
     }
-    else {
+    else 
       w->frames[i - shift] = w->frames[i];
-      w->frames[i].is_free = 1;
-    }
+    w->frames[i].is_free = 1;
   }
   w->next_available_frame -= shift;
   return 0;

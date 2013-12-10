@@ -21,7 +21,7 @@ typedef struct header_t {
 
 #define WINDOW_SIZE 100
 #define SEND_TIMEOUT 3
-#define RECV_TIMEOUT 10
+#define RECV_TIMEOUT 30
 
 
 typedef struct window_frame_t {

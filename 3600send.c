@@ -36,7 +36,15 @@ void usage() {
  * Reads the next block of data from stdin
  */
 int get_next_data(char *data, int size) {
-  return read(0, data, size);
+  // for consistancy, make sure we always grab DATA_SIZE bytes when possible
+  int total = 0;
+  while (size > 0){
+    int r =  read(0, data + total, size - total);
+    if (r == 0)
+      break;
+    total += r;
+  }
+  return total;
 }
 
 /**
@@ -48,7 +56,7 @@ void *get_next_packet(int *len) {
   int data_len = get_next_data(data, DATA_SIZE);
 
   if (data_len == 0) {
-    free(data);
+    //free(data);
     return NULL;
   }
 
@@ -60,8 +68,9 @@ void *get_next_packet(int *len) {
 
   header stored_header = *myheader;
   get_header(&stored_header); // dumb hack to change endianess
-  
   append_new_frame(&win, stored_header, data);
+
+  free(myheader);
 
   *len = sizeof(header) + data_len;
 
@@ -79,6 +88,8 @@ int send_packet(int sock, struct sockaddr_in out, void *packet, int packet_len, 
     perror("sendto");
     exit(1);
   }
+
+  //free(packet);
 
   return 1;
   
@@ -126,7 +137,7 @@ int retransmit_window(int sock, struct sockaddr_in out){
   // one that got dropped and really needs to get to the receiver
   if (!win.frames[i].is_free)
     retransmit_packet(sock, out, i);
-  while (i < 5 && !win.frames[i].is_free){ // arbitrary number of packets
+  while (i < 8 && !win.frames[i].is_free){ // arbitrary number of packets
     retransmit_packet(sock, out, i);
     i++;
   }
@@ -141,6 +152,7 @@ void send_final_packet(int sock, struct sockaddr_in out) {
     perror("sendto");
     exit(1);
   }
+  free(myheader);
 }
 
 int main(int argc, char *argv[]) {
@@ -245,14 +257,10 @@ int main(int argc, char *argv[]) {
         else
           no_new_acks++;
 
-        // if there is no empty frame at end of window, not done
-        done = win.frames[WINDOW_SIZE - 1].is_free;
-
         // if there have been three loops with no new acks, resend first
         // packet.
         if (no_new_acks >= 3){
-          //retransmit_window(sock, out);
-          done = 0;
+          retransmit_window(sock, out);
           no_new_acks = 0;
         }
       }
@@ -260,8 +268,9 @@ int main(int argc, char *argv[]) {
         // on timeout, retransmit
         mylog("[error] timeout occurred\n");
         retransmit_window(sock, out);
-        done = 0;
       }
+      // if there is no empty frame at end of window, not done
+      done = win.frames[WINDOW_SIZE - 1].is_free;
     }
   }
 

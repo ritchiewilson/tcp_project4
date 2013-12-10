@@ -100,18 +100,15 @@ int main() {
         mylog("[recv corrupted packet]\n");
         continue;
       }
-      if ( window_pos > win.size) {
-        mylog("[recv error - packet beyond window size]\n");
-        continue;
-      }
 
       if ( myheader->sequence < win.data_offset_at_start_of_window) {
-        mylog("[recv duplicate packet]\n");
-        continue;
+        mylog("[recv duplicate packet: %d]\n", myheader->sequence);
       }
-     
+      else if ( window_pos > win.size) {
+        mylog("[recv error - packet beyond window size]\n");
+      }     
       // store the data in case there are gaps in transmission
-      if (win.frames[window_pos].is_free){
+      else if (win.frames[window_pos].is_free){
         add_frame_at_index(&win, *myheader, buf, window_pos);
       }
 

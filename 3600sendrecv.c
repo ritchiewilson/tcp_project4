@@ -158,7 +158,7 @@ int initialize_window(window *w){
 
 
 /*
- * Returns 1 if window has free space left. Returns 0 if it does not.
+ * Returns 1 if window has free space left. Returns 0 if it does not.
  */
 int window_has_free_space(window w){
   if (w.next_available_frame < w.size)
@@ -168,6 +168,8 @@ int window_has_free_space(window w){
 
 
 int shift_window(window *w, int shift){
+  if (shift == 0)
+    return 0;
   int i;
   for(i = 0; i < w->size; i++){
     if (i < shift){
@@ -175,11 +177,8 @@ int shift_window(window *w, int shift){
       free(w->frames[i].data);
       w->frames[i].is_free = 1;
     }
-    else if ( i <= w->size - shift){
+    else {
       w->frames[i - shift] = w->frames[i];
-      w->frames[i].is_free = 1;
-    }
-    else{
       w->frames[i].is_free = 1;
     }
   }

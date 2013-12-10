@@ -99,6 +99,8 @@ int send_next_packet(int sock, struct sockaddr_in out) {
  * Retransmit the packet at window index i
  */
 int retransmit_packet(int sock, struct sockaddr_in out, int i){
+  if (win.frames[i].is_free)
+    return -1;
   header myheader = win.frames[i].head;
   int data_len = myheader.length;
   int seq = data_len + myheader.sequence;
@@ -107,9 +109,28 @@ int retransmit_packet(int sock, struct sockaddr_in out, int i){
   memcpy(packet, &myheader, sizeof(header));
   memcpy(((char *) packet) + sizeof(header), win.frames[i].data, data_len);
 
+  mylog("[retransmitting]\n");
   int packet_len = data_len + sizeof(header);
-  return send_packet(sock, out, packet, packet_len, seq);
+  send_packet(sock, out, packet, packet_len, seq);
 
+  return 0;
+}
+
+/*
+ * Retransmit the data in the window. Don't actually send all of it, but some
+ * usefully large portion of it.
+ */
+int retransmit_window(int sock, struct sockaddr_in out){
+  int i = 0;
+  // effectively always send the first packet in the window twice. That's the
+  // one that got dropped and really needs to get to the receiver
+  if (!win.frames[i].is_free)
+    retransmit_packet(sock, out, i);
+  while (i < 5 && !win.frames[i].is_free){ // arbitrary number of packets
+    retransmit_packet(sock, out, i);
+    i++;
+  }
+  return 0;
 }
 
 void send_final_packet(int sock, struct sockaddr_in out) {
@@ -169,6 +190,9 @@ int main(int argc, char *argv[]) {
   t.tv_sec = SEND_TIMEOUT;
   t.tv_usec = 0;
 
+
+  int no_new_acks = 0; // times nothing new has been acked. Resend on 3
+
   // Keep looping while there is more data to be read, or more packets to
   // restransmit.
   while(send_next_packet(sock, out) || !win.frames[0].is_free){
@@ -176,8 +200,6 @@ int main(int argc, char *argv[]) {
     // send as many packets as can fit in the window and can be read
     while(window_has_free_space(win) && send_next_packet(sock, out)){}
 
-    int retransmited = 0;
-    int no_new_acks = 0; // times nothing new has been acked. Resend on 3
     int done = 0;
     while (! done) {
       FD_ZERO(&socks);
@@ -202,7 +224,7 @@ int main(int argc, char *argv[]) {
         if ((myheader->magic != MAGIC) && 
             (myheader->sequence < win.data_offset_at_start_of_window) &&
             (myheader->ack != 1)) {
-          mylog("[recv corrupted ack] %x %d\n", MAGIC, sequence);
+          mylog("[recv corrupted ack] %x %d\n", MAGIC, myheader->sequence);
           continue;
         }
 
@@ -213,10 +235,10 @@ int main(int argc, char *argv[]) {
         while (!win.frames[acked].is_free &&
                win.frames[acked].head.sequence < myheader->sequence)
           acked++;
-        mylog("[send - acked: %d]\n", acked);
+        mylog("[acked: %d frames]\n", acked);
 
-        // removed ACKd frames from window
         if (acked > 0){
+          // removed ACKd frames from window
           shift_window(&win, acked);
           no_new_acks = 0;
         }
@@ -228,19 +250,16 @@ int main(int argc, char *argv[]) {
 
         // if there have been three loops with no new acks, resend first
         // packet.
-        if (no_new_acks >= 2){
-          retransmit_packet(sock, out, 0);
-          retransmit_packet(sock, out, 1);
-          retransmited = 1;
+        if (no_new_acks >= 3){
+          //retransmit_window(sock, out);
           done = 0;
+          no_new_acks = 0;
         }
       }
       else {
         // on timeout, retransmit
         mylog("[error] timeout occurred\n");
-        retransmit_packet(sock, out, 0);
-        retransmit_packet(sock, out, 1);
-        retransmited = 1;
+        retransmit_window(sock, out);
         done = 0;
       }
     }

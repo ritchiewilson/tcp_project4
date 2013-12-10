@@ -19,9 +19,9 @@ typedef struct header_t {
   unsigned int sequence;
 } header;
 
-#define WINDOW_SIZE 20
-#define SEND_TIMEOUT 5
-#define RECV_TIMEOUT 30
+#define WINDOW_SIZE 100
+#define SEND_TIMEOUT 3
+#define RECV_TIMEOUT 10
 
 
 typedef struct window_frame_t {
@@ -35,7 +35,7 @@ typedef struct window_t {
   int size;
   window_frame frames[WINDOW_SIZE];
   int next_available_frame;
-  int data_offset_at_start_of_window;
+  unsigned int data_offset_at_start_of_window;
 } window;
 
 

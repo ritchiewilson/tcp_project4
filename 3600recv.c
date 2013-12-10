@@ -135,7 +135,6 @@ int main() {
       else{
         ack_num = win.data_offset_at_start_of_window;
       }
-      mylog("[send ack] %d\n", ack_num);
       header *responseheader = make_header(ack_num, 0, eof, 1);
 
       // Send ACKs. If multiple frames were completed, packets are probably
@@ -146,6 +145,7 @@ int main() {
         n = 2;
       int j;
       for(j = 0; j <= n; j++){
+        mylog("[send ack] %d\n", ack_num);
         if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
           perror("sendto");
           exit(1);

@@ -89,8 +89,7 @@ int send_packet(int sock, struct sockaddr_in out, void *packet, int packet_len, 
     exit(1);
   }
 
-  //free(packet);
-
+  free((void *)packet);
   return 1;
   
 }
@@ -116,7 +115,7 @@ int retransmit_packet(int sock, struct sockaddr_in out, int i){
   int data_len = myheader.length;
   int seq = data_len + myheader.sequence;
   get_header(&myheader); // dumb hack to flip endianess
-  void *packet = malloc(DATA_SIZE);
+  void *packet = malloc(sizeof(header) + data_len);
   memcpy(packet, &myheader, sizeof(header));
   memcpy(((char *) packet) + sizeof(header), win.frames[i].data, data_len);
 

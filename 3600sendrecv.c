@@ -168,6 +168,7 @@ int window_has_free_space(window w){
 
 
 int shift_window(window *w, int shift){
+  mylog("shifting starts\n");
   if (shift == 0)
     return 0;
   int i;

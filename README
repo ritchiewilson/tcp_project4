@@ -2,18 +2,8 @@ CS 3600 Fall 2013
 Ritchie Wilson and Cody Orick
 Team nuclearfish
 
-This is a reliable transport system over UDP, which uses a sending and receiving program to
-send and receive data reliably over an unreliable network, including dropping of packets, delaying,
-duplicating, etc.
+This is a reliable transport system over UDP, which uses a sending and receiving program tomsend and receive data reliably over an unreliable network, including dropping of packets, delaying, duplicating, etc.
 
-It uses a configurable sliding window to achieve greater speed while being able to retransmit
-any missed packets. Development was done on the specialized machine for this project, and it
-was tested using the test script and the run script along with the logging functionality. Some
-difficulties encountered were excessive retransmission leading to poor performance caused by packet
-loss. This was helped by progressively changing the amount of acks sent, resulting in less
-overhead and retransmission. To send data, we use a window structure along with different functions
-to manipulate it. 
+It uses a configurable sliding window to achieve greater speed while being able to retransmit any missed packets. Development was done on the specialized machine for this project, and it was tested using the test script and the run script along with the logging functionality. Some difficulties encountered were excessive retransmission leading to poor performance caused by packet loss. This was helped by progressively changing the amount of acks sent, resulting in less overhead and retransmission. To send data, we use a window structure along with different functions to manipulate it. 
 
-If a packet is dropped, the receiver sends repeated acks for a previous packet, indicating to 
-the sender that it should retransmit. This project was difficult due to the difficulty in
-debugging. The logging was somewhat helpful with this.
+If a packet is dropped, the receiver sends repeated acks for a previous packet, indicating to the sender that it should retransmit. This project was difficult due to the difficulty in debugging. The logging was somewhat helpful with this.

@@ -166,9 +166,12 @@ int window_has_free_space(window w){
   return 0;
 }
 
-
+/*
+ * Shift the widown by the given number of frames. The first frames will be
+ * shifted out of the window, so they can freed and overwritten. The rest are
+ * moved back. The final frames will be left as free
+ */
 int shift_window(window *w, int shift){
-  mylog("shifting starts\n");
   if (shift == 0)
     return 0;
   int i;
@@ -185,6 +188,10 @@ int shift_window(window *w, int shift){
   return 0;
 }
 
+/*
+ * Put an incoming packet at a certain index in the window. This only used by
+ * the receiver since the packets can come in in any order.
+ */
 int add_frame_at_index(window *w, header h, char * data, int index){
   w->frames[index].head = h;
   w->frames[index].data = data;
@@ -194,7 +201,8 @@ int add_frame_at_index(window *w, header h, char * data, int index){
 
 /*
  * appends the header and data as a new frame in the window, and increments
- * last used frame.
+ * last used frame. Only called from the sender since it only ever adds the end
+ * of the frame.
  *
  * Returns 0 on success
  * Returns -1 if there is no free space

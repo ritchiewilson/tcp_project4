@@ -36,7 +36,9 @@ void usage() {
  * Reads the next block of data from stdin
  */
 int get_next_data(char *data, int size) {
-  // for consistancy, make sure we always grab DATA_SIZE bytes when possible
+  // for consistancy, make sure we always grab DATA_SIZE bytes when
+  // possible. Without this loop, sometimes read will quit at the end of block
+  // and give shorter packets.
   int total = 0;
   while (size > 0){
     int r =  read(0, data + total, size - total);
@@ -56,20 +58,21 @@ void *get_next_packet(int *len) {
   int data_len = get_next_data(data, DATA_SIZE);
 
   if (data_len == 0) {
-    //free(data);
+    free(data);
     return NULL;
   }
 
+  // create the packet
   header *myheader = make_header(sequence, data_len, 0, 0);
   void *packet = malloc(sizeof(header) + data_len);
   memcpy(packet, myheader, sizeof(header));
   memcpy(((char *) packet) +sizeof(header), data, data_len);
   sequence += data_len;
 
+  // store the packet header and data in the window for retransmission
   header stored_header = *myheader;
   get_header(&stored_header); // dumb hack to change endianess
   append_new_frame(&win, stored_header, data);
-
   free(myheader);
 
   *len = sizeof(header) + data_len;
@@ -77,40 +80,58 @@ void *get_next_packet(int *len) {
   return packet;
 }
 
-int send_packet(int sock, struct sockaddr_in out, void *packet, int packet_len, int seq) {
+/*
+ * Actually sends then frees the malloced packet. Called from send_next_packet
+ * and retransmit packet.
+ * 
+ * Returns 0 on success
+ * Returns -1 otherwise
+ */
+int send_packet(int sock, struct sockaddr_in out, void *packet, int packet_len) {
 
   if (packet == NULL) 
-    return 0;
+    return -1;
   
-  mylog("[send data] %d (%d)\n", seq, packet_len - sizeof(header));
-
   if (sendto(sock, packet, packet_len, 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
     perror("sendto");
     exit(1);
   }
 
   free((void *)packet);
-  return 1;
+  return 0;
   
 }
 
+/*
+ * Puts together the next packet from stdin and sends it out.
+ *
+ * Returns 1 if it successfully sent the packet
+ * Returns 0 otherwise
+ */
 int send_next_packet(int sock, struct sockaddr_in out) {
   int packet_len = 0;
   void *packet = get_next_packet(&packet_len);
 
   if (packet == NULL) 
     return 0;
-  
-  return send_packet(sock, out, packet, packet_len, sequence);
 
+
+  mylog("[send data] %d (%d)\n", sequence, packet_len - sizeof(header));
+
+  send_packet(sock, out, packet, packet_len);
+
+  return 1;
 }
 
 /*
  * Retransmit the packet at window index i
  */
 int retransmit_packet(int sock, struct sockaddr_in out, int i){
+  // check that that frame actually contains a packet to retransmit
   if (win.frames[i].is_free)
     return -1;
+
+  // get the packet from the window
   header myheader = win.frames[i].head;
   int data_len = myheader.length;
   int seq = data_len + myheader.sequence;
@@ -119,9 +140,10 @@ int retransmit_packet(int sock, struct sockaddr_in out, int i){
   memcpy(packet, &myheader, sizeof(header));
   memcpy(((char *) packet) + sizeof(header), win.frames[i].data, data_len);
 
-  mylog("[retransmitting]\n");
+  // send the packet
+  mylog("[retransmitting data] %d (%d)\n", seq, data_len);
   int packet_len = data_len + sizeof(header);
-  send_packet(sock, out, packet, packet_len, seq);
+  send_packet(sock, out, packet, packet_len);
 
   return 0;
 }
@@ -131,12 +153,17 @@ int retransmit_packet(int sock, struct sockaddr_in out, int i){
  * usefully large portion of it.
  */
 int retransmit_window(int sock, struct sockaddr_in out){
-  int i = 0;
+  int number_to_send = 4;
+  if (win.next_available_frame < 15) // assume this is the end of the file
+    number_to_send = win.next_available_frame;
+
   // effectively always send the first packet in the window twice. That's the
   // one that got dropped and really needs to get to the receiver
-  if (!win.frames[i].is_free)
-    retransmit_packet(sock, out, i);
-  while (i < 8 && !win.frames[i].is_free){ // arbitrary number of packets
+  if (!win.frames[0].is_free)
+    retransmit_packet(sock, out, 0);
+
+  int i = 0;
+  while (i < number_to_send && !win.frames[i].is_free){
     retransmit_packet(sock, out, i);
     i++;
   }

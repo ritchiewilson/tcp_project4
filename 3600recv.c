@@ -76,7 +76,8 @@ int main() {
 
 
   initialize_window(&win);
-
+  int last_acked = 0;
+  int number_of_times_acked = 0;
   // wait to receive, or for a timeout
   while (1) {
     // our receive buffer
@@ -136,25 +137,41 @@ int main() {
         ack_num = win.data_offset_at_start_of_window;
       }
       header *responseheader = make_header(ack_num, 0, eof, 1);
+      if (last_acked == ack_num)
+        number_of_times_acked++;
+      else{
+        last_acked = ack_num;
+        number_of_times_acked = 0;
+      }
 
-      // Send ACKs. If multiple frames were completed, packets are probably
+      // If multiple frames were completed, packets are probably
       // being dropped, so send multiple acks. But don't send more than three,
       // or it might trigger the sender to retransmit window in a feedback loop
       int n = frames_printed;
       if (frames_printed > 2)
         n = 2;
-      int j;
-      for(j = 0; j <= n; j++){
+      int j = 0;
+
+      // Send Acks
+      do{
+        j++;
+
+        // if this squence number has been acked less than 5 times, send it
+        // again, otherwise harsh backoff
+        number_of_times_acked++;
+        if(number_of_times_acked > 7 && number_of_times_acked % 3 != 0){
+          continue;
+        }
         mylog("[send ack] %d\n", ack_num);
         if (sendto(sock, responseheader, sizeof(header), 0, (struct sockaddr *) &in, (socklen_t) sizeof(in)) < 0) {
           perror("sendto");
           exit(1);
         }
-      }
+      } while (j < n);
       
       free(responseheader);
 
-      // Shift the window the number of frames full received and printed
+      // Shift the window the number of frames fully received and printed
       shift_window(&win, frames_printed);
       
       if (eof) {
@@ -167,7 +184,5 @@ int main() {
       exit(1);
     }
   }
-
-
   return 0;
 }

@@ -19,7 +19,7 @@ typedef struct header_t {
   unsigned int sequence;
 } header;
 
-#define WINDOW_SIZE 100
+#define WINDOW_SIZE 25
 #define SEND_TIMEOUT 3
 #define RECV_TIMEOUT 30
 

@@ -2,8 +2,46 @@ CS 3600 Fall 2013
 Ritchie Wilson and Cody Orick
 Team nuclearfish
 
-This is a reliable transport system over UDP, which uses a sending and receiving program tomsend and receive data reliably over an unreliable network, including dropping of packets, delaying, duplicating, etc.
+This is a reliable transport system over UDP, which uses a sending and
+receiving program to send and receive data reliably over an unreliable network,
+including dropping of packets, delaying, duplicating, etc.
 
-It uses a configurable sliding window to achieve greater speed while being able to retransmit any missed packets. Development was done on the specialized machine for this project, and it was tested using the test script and the run script along with the logging functionality. Some difficulties encountered were excessive retransmission leading to poor performance caused by packet loss. This was helped by progressively changing the amount of acks sent, resulting in less overhead and retransmission. To send data, we use a window structure along with different functions to manipulate it. 
+It uses a sliding window in order to be able to send large files while keeping
+a reasonably small amount of buffered data in case some needs to be
+retransmitted. The window is its own struct that keeps track of window
+"frames", which are the headers and data which need to be stored. The window
+also keeps track of some other data, like which frames are free and how much
+space is left. This way both the sender and the receiver can reuse much of the
+same code in how they handle their windows. In order to work properly, we make
+sure that every frame but the last will send 1460 bytes of data. Ocassionally
+the "read" command in C will return less than the requested bytes if it gets to
+the end of a block, so we make sure we are always reading then sending a full
+packets worth of data.
 
-If a packet is dropped, the receiver sends repeated acks for a previous packet, indicating to the sender that it should retransmit. This project was difficult due to the difficulty in debugging. The logging was somewhat helpful with this.
+One of the biggest challenges was getting our implementation to work
+efficiently in both cases of very high and very low dropped packet rates. When
+the network is dropping 50% of packets, we need to very aggressively resend,
+otherwise it takes too long for the whole message to get through. However that
+leads to extreme inefficiencies for large files but just a few packet
+drops. There were far too many duplicate packets being resent.
+
+To solve this, we used a combination of several strategies. First, the sender
+retransmits on timeouts, plus we implemented fast retransmit for when we get
+the same ACK numbers 3 times in a row. Next, the retransmit sends the first
+packet in the window twice, because we know that that packet is missing, it has
+become a bottleneck in the process, and so it is very important that it get
+through. The retransmit then sends some extra packets, assuming that if one got
+dropped, some others got dropped as well. In normal opperation, it will only
+retransmit a few extra. When the window is almost empty, however, we retransmit
+more packets. At this point we have sent all but the last few packets of the
+file. Resending the whole tail end of the file adds some overhead, but can
+really improve the completion time.
+
+On the receiver side, we reduce the bandwidth needs by throtling the number of
+repeated ACKs it sends. If it is sending many in a row, this likely means that
+it received a full window's worth of data, but is only missing one packet at
+the start. Replying with all those ACKs will just trigger multiple fast
+retransmits from the sender, and the receiver will get many duplicates, causing
+more repeated ACKs. So, the first few times the receiver is sending a repeated
+ACK, it goes through like normal. At a certain threshold, though, it starts
+sending just one in three so it does not overload the sender.

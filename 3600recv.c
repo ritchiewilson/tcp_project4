@@ -102,16 +102,21 @@ int main() {
         continue;
       }
 
-      if ( myheader->sequence < win.data_offset_at_start_of_window) {
+      if ( myheader->sequence < win.data_offset_at_start_of_window)
         mylog("[recv duplicate packet: %d]\n", myheader->sequence);
-      }
-      else if ( window_pos > win.size) {
+      else if ( window_pos >= win.size)
         mylog("[recv error - packet beyond window size]\n");
-      }     
+      else if (window_pos == 0)
+        mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (in-order)");
+      else if (window_pos < win.size)
+        mylog("[recv data] %d (%d) %s\n", myheader->sequence, myheader->length, "ACCEPTED (out-of-order)");
+
       // store the data in case there are gaps in transmission
-      else if (win.frames[window_pos].is_free){
+      if (window_pos >= 0 && window_pos < win.size &&
+          win.frames[window_pos].is_free)
         add_frame_at_index(&win, *myheader, buf, window_pos);
-      }
+      else
+        free(buf);  // otherwise it is freed when window shifts
 
       // print all completed stored data at the front of the window
       int eof = 0;
@@ -120,7 +125,6 @@ int main() {
         header *head = &(win.frames[i].head);
         char *data = get_data(win.frames[i].data);
         write(1, data, head->length);
-        mylog("[recv data] %d (%d) %s\n", head->sequence, head->length, "ACCEPTED (in-order)");
         if(head->eof)
           eof = 1;
         i++;
@@ -156,7 +160,7 @@ int main() {
       do{
         j++;
 
-        // if this squence number has been acked less than 5 times, send it
+        // if this squence number has been acked less than 7 times, send it
         // again, otherwise harsh backoff
         number_of_times_acked++;
         if(number_of_times_acked > 7 && number_of_times_acked % 3 != 0){

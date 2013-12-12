@@ -134,14 +134,15 @@ int retransmit_packet(int sock, struct sockaddr_in out, int i){
   // get the packet from the window
   header myheader = win.frames[i].head;
   int data_len = myheader.length;
-  int seq = data_len + myheader.sequence;
+  int seq = myheader.sequence;
   get_header(&myheader); // dumb hack to flip endianess
   void *packet = malloc(sizeof(header) + data_len);
   memcpy(packet, &myheader, sizeof(header));
   memcpy(((char *) packet) + sizeof(header), win.frames[i].data, data_len);
 
   // send the packet
-  mylog("[retransmitting data] %d (%d)\n", seq, data_len);
+  mylog("[send retransmission]");
+  mylog("[send data] %d (%d)\n", seq, data_len);
   int packet_len = data_len + sizeof(header);
   send_packet(sock, out, packet, packet_len);
 
@@ -149,12 +150,15 @@ int retransmit_packet(int sock, struct sockaddr_in out, int i){
 }
 
 /*
- * Retransmit the data in the window. Don't actually send all of it, but some
- * usefully large portion of it.
+ * Retransmit the data in the window. Don't send all of it, but some usefully
+ * large portion of it.
  */
 int retransmit_window(int sock, struct sockaddr_in out){
-  int number_to_send = 4;
-  if (win.next_available_frame < 15) // assume this is the end of the file
+  int number_to_send = 3;  // default number to send
+
+  // If this is the end of the file, just send whole tail end. It can't hurt
+  // efficiency much now, but can speed up completion time.
+  if (win.next_available_frame < 10)
     number_to_send = win.next_available_frame;
 
   // effectively always send the first packet in the window twice. That's the
@@ -174,9 +178,12 @@ void send_final_packet(int sock, struct sockaddr_in out) {
   header *myheader = make_header(sequence+1, 0, 1, 0);
   mylog("[send eof]\n");
 
-  if (sendto(sock, myheader, sizeof(header), 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
-    perror("sendto");
-    exit(1);
+  int i;
+  for (i = 0; i < 4; i++){
+    if (sendto(sock, myheader, sizeof(header), 0, (struct sockaddr *) &out, (socklen_t) sizeof(out)) < 0) {
+      perror("sendto");
+      exit(1);
+    }
   }
   free(myheader);
 }
@@ -273,7 +280,6 @@ int main(int argc, char *argv[]) {
         while (!win.frames[acked].is_free &&
                win.frames[acked].head.sequence < myheader->sequence)
           acked++;
-        mylog("[acked: %d frames]\n", acked);
 
         if (acked > 0){
           // removed ACKd frames from window
